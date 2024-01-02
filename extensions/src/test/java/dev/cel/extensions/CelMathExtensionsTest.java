@@ -653,4 +653,118 @@ public class CelMathExtensionsTest {
 
     assertThat(result).isTrue();
   }
+
+  @Test
+  @TestParameters("{expr: 'math.sum(1, 2, 3, 4)', expectedResult: 10}")
+  @TestParameters("{expr: 'math.sum(15, -2, -3, 5)', expectedResult: 15}")
+  @TestParameters("{expr: 'math.sum(150, 200, 1, 50, 67, -87, -50, -350)', expectedResult: -19}")
+  public void sum_intResult_success(String expr, int expectedResult) throws Exception {
+    CelAbstractSyntaxTree ast = CEL_COMPILER.compile(expr).getAst();
+
+    Object result = CEL_RUNTIME.createProgram(ast).eval();
+
+    assertThat(result).isEqualTo(expectedResult);
+  }
+
+  @Test
+  @TestParameters("{expr: 'math.sum(1.5, 2.2, 3.3, 4.5)', expectedResult: 11.5}")
+  @TestParameters("{expr: 'math.sum(15.0, -2.2, -3.3, 5.0)', expectedResult: 14.5}")
+  @TestParameters("{expr: 'math.sum(150.13, 200.2, 1.3, 50.36, 67.0, -87.0, -50.0, -350.0)', expectedResult: -18.00999999999999}")
+  @TestParameters("{expr: 'math.sum(150.13, 200.2, 1.3, 50.36, 67.0, -87.0, -50.0, -350.0)', expectedResult: -18.00999999999999}")
+  public void sum_doubleResult_success(String expr, double expectedResult) throws Exception {
+    CelAbstractSyntaxTree ast = CEL_COMPILER.compile(expr).getAst();
+
+    Object result = CEL_RUNTIME.createProgram(ast).eval();
+
+    assertThat(result).isEqualTo(expectedResult);
+  }
+
+  @Test
+  @TestParameters("{expr: 'math.sum(2u, 6u)', expectedResult: 8}")
+  @TestParameters("{expr: 'math.sum(1u, 1u, 2u, 6u)', expectedResult: 10}")
+  @TestParameters("{expr: 'math.sum(5u, 1u, 1000u, 600u, 25u, 85u, 78u, 56u, 1u)', expectedResult: 1851}")
+  public void sum_signedLongResult_withUnsignedLongType_success(String expr, long expectedResult)
+          throws Exception {
+    CelOptions celOptions = CelOptions.current().enableUnsignedLongs(true).build();
+    CelCompiler celCompiler =
+            CelCompilerFactory.standardCelCompilerBuilder()
+                              .setOptions(celOptions)
+                              .addLibraries(CelExtensions.math(celOptions))
+                              .build();
+    CelRuntime celRuntime =
+            CelRuntimeFactory.standardCelRuntimeBuilder()
+                             .setOptions(celOptions)
+                             .addLibraries(CelExtensions.math(celOptions))
+                             .build();
+
+    CelAbstractSyntaxTree ast = celCompiler.compile(expr).getAst();
+    UnsignedLong result = (UnsignedLong) celRuntime.createProgram(ast).eval();
+
+    assertThat(result).isEqualTo(UnsignedLong.valueOf(expectedResult));
+  }
+
+  @Test
+  @TestParameters("{expr: 'math.sum(2u, 6u)', expectedResult: 8}")
+  @TestParameters("{expr: 'math.sum(1u, 1u, 2u, 6u)', expectedResult: 10}")
+  @TestParameters("{expr: 'math.sum(5u, 1u, 1000u, 600u, 25u, 85u, 78u, 56u, 1u)', expectedResult: 1851}")
+  public void sum_unsignedLongResult_withSignedLongType_success(String expr, long expectedResult)
+          throws Exception {
+    CelAbstractSyntaxTree ast = CEL_COMPILER.compile(expr).getAst();
+
+    Object result = CEL_RUNTIME.createProgram(ast).eval();
+
+    assertThat(result).isEqualTo(expectedResult);
+  }
+
+  @Test
+  @TestParameters("{expr: 'math.sum(dyn(2), dyn(6))', expectedResult: 8}")
+  @TestParameters("{expr: 'math.sum(dyn(1), dyn(1), dyn(2), dyn(6))', expectedResult: 10}")
+  @TestParameters("{expr: 'math.sum(dyn(65), dyn(12), dyn(10), dyn(96), dyn(52), dyn(58), dyn(9), dyn(47), dyn(10))', expectedResult: 359}")
+  public void sum_LongResult_withLongDynType_success(String expr, long expectedResult)
+          throws Exception {
+    CelAbstractSyntaxTree ast = CEL_COMPILER.compile(expr).getAst();
+
+    Object result = CEL_RUNTIME.createProgram(ast).eval();
+
+    assertThat(result).isEqualTo(expectedResult);
+  }
+
+  @Test
+  @TestParameters("{expr: 'math.sum(dyn(2u), dyn(6u))', expectedResult: 8}")
+  @TestParameters("{expr: 'math.sum(dyn(1), dyn(1), dyn(2), dyn(6))', expectedResult: 10}")
+  @TestParameters("{expr: 'math.sum(dyn(65), dyn(12), dyn(10), dyn(96), dyn(52), dyn(58), dyn(9), dyn(47), dyn(10))', expectedResult: 359}")
+  public void sum_SignedLongResult_withSignedLongType_success(String expr, long expectedResult)
+          throws Exception {
+    CelAbstractSyntaxTree ast = CEL_COMPILER.compile(expr).getAst();
+
+    Object result = CEL_RUNTIME.createProgram(ast).eval();
+
+    assertThat(result).isEqualTo(expectedResult);
+  }
+
+//  @Test
+//  @TestParameters("{expr: 'math.sum(1, 2.0)', expectedResult: '3.0'}")
+//  @TestParameters("{expr: 'math.sum(1u, 2.0)', expectedResult: '3.0'}")
+//  @TestParameters("{expr: 'math.sum(1u, 1)', expectedResult: '2.0'}")
+//  @TestParameters("{expr: 'math.sum('1', '2.0')', expectedResult: '3.0'}")
+//  @TestParameters("{expr: 'math.sum(1, 2.0, 3u, dyn(-4))', expectedResult: 10}")
+//  @TestParameters("{expr: 'math.sum(15, -2.0, -3.0, 5.0)', expectedResult: 15}")
+//  @TestParameters("{expr: 'math.sum(150, dyn('200'), '1', 50.0, '67.0', dyn(-87), -50, '-350')', expectedResult: -19}")
+//  public void sum_doubleResult_withMixedTypes_success(String expr, double expectedResult) throws Exception {
+//    CelAbstractSyntaxTree ast = CEL_COMPILER.compile(expr).getAst();
+//
+//    Object result = CEL_RUNTIME.createProgram(ast).eval();
+//
+//    assertThat(result).isEqualTo(expectedResult);
+//  }
+  //  @Test
+//  @TestParameters("{expr: 'math.sum(-9223372036854775808, 9223372036854775808, 1)', expectedResult: 1}")
+//  @TestParameters("{expr: 'math.sum(-9223372036854775808, -2, 2, -2)', expectedResult: -9223372036854775810}")
+//  public void sum_longResult_success(String expr, BigInteger expectedResult) throws Exception {
+//    CelAbstractSyntaxTree ast = CEL_COMPILER.compile(expr).getAst();
+//
+//    Object result = CEL_RUNTIME.createProgram(ast).eval();
+//
+//    assertThat(result).isEqualTo(expectedResult);
+//  }
 }

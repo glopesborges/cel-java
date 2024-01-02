@@ -63,6 +63,7 @@ final class CelMathExtensions implements CelCompilerLibrary, CelRuntimeLibrary {
   private static final String MATH_MIN_FUNCTION = "math.@min";
   private static final String MATH_MIN_OVERLOAD_DOC =
       "Returns the least valued number present in the arguments.";
+  private static final String MATH_SUM_FUNCTION = "math.@sum";
 
   /**
    * Returns the proper comparison function to use for a math function call involving different
@@ -101,6 +102,37 @@ final class CelMathExtensions implements CelCompilerLibrary, CelRuntimeLibrary {
         UnsignedLong.class,
         Long.class,
         (x, y) -> ComparisonFunctions.compareUintInt((UnsignedLong) x, (Long) y));
+    return builder.buildOrThrow();
+  }
+
+  private static ImmutableTable<Class, Class, BiFunction<Object, Object, Integer>>
+  newAdderTable() {
+    ImmutableTable.Builder<Class, Class, BiFunction<Object, Object, Integer>> builder =
+            new ImmutableTable.Builder<>();
+    builder.put(
+            Long.class,
+            Double.class,
+            (x, y) -> ComparisonFunctions.compareIntDouble((Long) x, (Double) y));
+    builder.put(
+            Double.class,
+            Long.class,
+            (x, y) -> ComparisonFunctions.compareDoubleInt((Double) x, (Long) y));
+    builder.put(
+            Double.class,
+            UnsignedLong.class,
+            (x, y) -> ComparisonFunctions.compareDoubleUint((Double) x, (UnsignedLong) y));
+    builder.put(
+            UnsignedLong.class,
+            Double.class,
+            (x, y) -> ComparisonFunctions.compareUintDouble((UnsignedLong) x, (Double) y));
+    builder.put(
+            Long.class,
+            UnsignedLong.class,
+            (x, y) -> ComparisonFunctions.compareIntUint((Long) x, (UnsignedLong) y));
+    builder.put(
+            UnsignedLong.class,
+            Long.class,
+            (x, y) -> ComparisonFunctions.compareUintInt((UnsignedLong) x, (Long) y));
     return builder.buildOrThrow();
   }
 
@@ -334,7 +366,20 @@ final class CelMathExtensions implements CelCompilerLibrary, CelRuntimeLibrary {
                 Double.class,
                 CelMathExtensions::minPair),
             CelRuntime.CelFunctionBinding.from(
-                "math_@min_int_uint", Long.class, UnsignedLong.class, CelMathExtensions::minPair)));
+                "math_@min_int_uint", Long.class, UnsignedLong.class, CelMathExtensions::minPair))),
+    SUM(
+            CelFunctionDecl.newFunctionDeclaration(
+                    MATH_SUM_FUNCTION,
+                    CelOverloadDecl.newGlobalOverload(
+                            "math_@sum_dyn",
+                            "Returns the sum of the given list of numeric values.",
+                            SimpleType.DYN,
+                            ListType.create(SimpleType.DYN))),
+            ImmutableSet.of(
+                    CelRuntime.CelFunctionBinding.from(
+                            "math_@sum_dyn", List.class, CelMathExtensions::sumList)
+            )
+    );
 
     private final CelFunctionDecl functionDecl;
     private final ImmutableSet<CelRuntime.CelFunctionBinding> functionBindings;
@@ -350,6 +395,15 @@ final class CelMathExtensions implements CelCompilerLibrary, CelRuntimeLibrary {
       this.functionBindings = functionBindings;
       this.functionBindingsULongSigned = functionBindingsULongSigned;
       this.functionBindingsULongUnsigned = functionBindingsULongUnsigned;
+    }
+
+    Function(
+            CelFunctionDecl functionDecl,
+            ImmutableSet<CelRuntime.CelFunctionBinding> functionBindings) {
+      this.functionDecl = functionDecl;
+      this.functionBindings = functionBindings;
+      this.functionBindingsULongSigned = ImmutableSet.<CelRuntime.CelFunctionBinding>builder().build();
+      this.functionBindingsULongUnsigned = ImmutableSet.<CelRuntime.CelFunctionBinding>builder().build();
     }
   }
 
@@ -369,7 +423,9 @@ final class CelMathExtensions implements CelCompilerLibrary, CelRuntimeLibrary {
   public void setParserOptions(CelParserBuilder parserBuilder) {
     parserBuilder.addMacros(
         CelMacro.newReceiverVarArgMacro("greatest", CelMathExtensions::expandGreatestMacro),
-        CelMacro.newReceiverVarArgMacro("least", CelMathExtensions::expandLeastMacro));
+        CelMacro.newReceiverVarArgMacro("least", CelMathExtensions::expandLeastMacro),
+        CelMacro.newReceiverVarArgMacro("sum", CelMathExtensions::expandSumMacro)
+    );
   }
 
   @Override
@@ -503,6 +559,53 @@ final class CelMathExtensions implements CelCompilerLibrary, CelRuntimeLibrary {
         return Optional.of(
             exprFactory.newGlobalCall(MATH_MIN_FUNCTION, exprFactory.newList(arguments)));
     }
+  }
+
+  private static Optional<CelExpr> expandSumMacro(
+          CelMacroExprFactory exprFactory, CelExpr target, ImmutableList<CelExpr> arguments) {
+    if (!isTargetInNamespace(target)) {
+      // Return empty to indicate that we're not interested in expanding this macro, and
+      // that the parser should default to a function call on the receiver.
+      return Optional.empty();
+    }
+
+      if (arguments.isEmpty()) {
+          return newError(exprFactory, "math.sum() requires at least one argument", target);
+      }
+      Optional<CelExpr> invalidArg = checkInvalidArgument(exprFactory, "math.sum()", arguments);
+      if (invalidArg.isPresent()) {
+          return invalidArg;
+      }
+
+      return Optional.of(
+              exprFactory.newGlobalCall(MATH_SUM_FUNCTION, exprFactory.newList(arguments)));
+  }
+
+  private static Comparable sumPair(Comparable x, Comparable y) {
+    if (x.getClass().equals(y.getClass())) {
+      if (x instanceof Double) {
+        return ((Double) x) + ((Double) y);
+      } else if (x instanceof Long) {
+        return ((Long) x) + ((Long) y);
+      } else if (x instanceof UnsignedLong) {
+        return ((UnsignedLong) x).plus((UnsignedLong) y);
+      }
+    }
+
+      throw new IllegalArgumentException("Unsupported types for sum: " + x.getClass() + ", " + y.getClass());
+  }
+
+  private static Comparable sumList(List<Comparable> list) {
+      if (list.isEmpty()) {
+          throw new IllegalStateException("math.@sum(list) argument must not be empty");
+      }
+
+      Comparable sum = list.get(0);
+      for (int i = 1; i < list.size(); i++) {
+          sum = sumPair(sum, list.get(i));
+      }
+
+      return sum;
   }
 
   private static boolean isTargetInNamespace(CelExpr target) {
